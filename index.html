@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0c0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rift Counter">
+<title>Riftbound Counter</title>
+<style>
+:root{--bg:#0c0d12;--ink:#f4f1fa;--dim:rgba(244,241,250,.55);--bar:64px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+#board{position:fixed;inset:0 0 var(--bar) 0;display:grid;gap:10px;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left));}
+.p{container-type:size;position:relative;border-radius:22px;overflow:hidden;background:linear-gradient(160deg,var(--c1),var(--c2));transition:box-shadow .08s}
+.p .bg{position:absolute;inset:0;background-size:cover;background-position:center 30%;opacity:.55}
+.p .shade{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,.05),rgba(0,0,0,.55))}
+/* .inner holds everything inside a box and is the only thing that rotates (0/90/180/270).
+   For 90/270 its width/height are swapped so it still exactly fills the (unrotated) box. */
+.inner{container-type:size;position:absolute;left:50%;top:50%;width:100cqw;height:100cqh;display:flex;flex-direction:column;transform:translate(-50%,-50%) rotate(var(--r,0deg))}
+.p.sw .inner{width:100cqh;height:100cqw}
+.p .bg,.p .shade{pointer-events:none}
+.zone{position:relative;flex:1;display:flex;align-items:center;justify-content:center;font-size:34px;color:var(--dim);cursor:pointer}
+.zone:active{background:rgba(255,255,255,.1)}
+.zone.up{align-items:flex-start;padding-top:18px}
+.zone.down{align-items:flex-end;padding-bottom:18px}
+.score{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:min(40cqh,26cqw);font-weight:800;line-height:1;pointer-events:none;text-shadow:0 4px 24px rgba(0,0,0,.6);font-variant-numeric:tabular-nums}
+.name{position:absolute;left:14px;top:14px;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;background:rgba(0,0,0,.45);font-size:15px;cursor:pointer;max-width:70%;z-index:2}
+.name img,.name i{object-position:50% 25%;width:30px;height:30px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.18);display:grid;place-items:center;font-style:normal;font-weight:700;flex:none}
+.name span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{position:absolute;right:14px;top:14px;padding:6px 12px;border-radius:999px;font-weight:700;font-size:14px;background:#fff;color:#111;display:none;z-index:2}
+.p.first .badge.f,.p.won .badge.w{display:block}
+.badge.w{background:#ffd34d}
+.p.scan{box-shadow:inset 0 0 0 7px #fff,inset 0 0 70px rgba(255,255,255,.45)}
+.p.first{box-shadow:inset 0 0 0 7px #fff}
+.p.won{box-shadow:inset 0 0 0 7px #ffd34d}
+.inner .name,.inner .badge{transform:none}
+/* wins pips */
+.wins{position:absolute;left:14px;top:58px;display:flex;gap:4px;z-index:2}
+.pip{width:30px;height:30px;display:grid;place-items:center;cursor:pointer}
+.pip::after{content:"";width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.85);background:rgba(0,0,0,.35);box-sizing:border-box}
+.pip.on::after{background:#ffd34d;border-color:#fff;box-shadow:0 0 10px rgba(255,211,77,.8)}
+/* controls */
+#timer{display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:999px;background:#15161d;border:1px solid rgba(255,255,255,.14)}
+#timer .ib{width:38px;height:38px;font-size:18px}
+#timer b{font-size:20px;font-variant-numeric:tabular-nums;min-width:68px;text-align:center;letter-spacing:.5px}
+#timer.low b{color:#ff7a7a}
+#timer.end{animation:blink .6s steps(2) infinite}
+@keyframes blink{50%{background:#7a1d1d}}
+.ib{width:42px;height:42px;border-radius:50%;border:0;background:#262833;color:var(--ink);font-size:20px;display:grid;place-items:center;cursor:pointer}
+.ib:active{background:#3a3d4d}
+#bar{position:fixed;left:0;right:0;bottom:0;height:var(--bar);display:flex;align-items:center;justify-content:center;gap:12px}
+#bar .ib{width:48px;height:48px;font-size:22px}
+#bar .ib.hot{background:#6d3fc0}
+dialog{border:0;border-radius:20px;background:#1a1b24;color:var(--ink);padding:22px;width:min(560px,92vw);max-height:88vh;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+h2{margin:0 0 14px;font-size:20px;text-align:center}
+h3{margin:16px 0 8px;font-size:14px;color:var(--dim);font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.opt{flex:1;min-width:52px;padding:12px 0;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#262833;color:var(--ink);font-size:16px;cursor:pointer}
+.opt.on{background:#6d3fc0;border-color:#a98af0}
+.done{width:100%;margin-top:20px;padding:14px;border:0;border-radius:12px;background:#6d3fc0;color:#fff;font-size:17px;font-weight:700;cursor:pointer}
+#legendGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.lg{position:relative;border-radius:12px;overflow:hidden;background:#262833;cursor:pointer;text-align:center;border:2px solid transparent}
+.lg:active{border-color:#a98af0}
+.lg .im{aspect-ratio:3/4;background:#333 center/cover;display:grid;place-items:center;font-size:30px;color:var(--dim)}
+.lg div.t{padding:6px 4px;font-size:13px}
+.addArt{grid-column:1/-1;justify-self:center;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:#262833;color:var(--ink);font-size:14px;cursor:pointer}
+.lg .del{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.7);color:#fff;font-size:16px;line-height:1;cursor:pointer}
+#cvs{display:block;width:100%;touch-action:none;border-radius:12px;background:#000;cursor:grab}
+#zoom{width:100%;margin:14px 0 4px}
+.hint{margin:0;text-align:center;font-size:13px;color:var(--dim)}
+#cropper{width:min(420px,90vw);padding:16px 18px}
+#cropper h2{margin-bottom:10px}
+/* landscape / short screens: canvas on the left sized to the window height, controls on the right */
+@media (orientation:landscape) and (max-height:560px){
+  #cropper{width:min(720px,94vw);padding:12px 16px}
+  #cropper h2{display:none}
+  .cwrap{display:flex;gap:18px;align-items:center}
+  #cvs{width:auto;height:calc(88vh - 34px);flex:none}
+  .cside{flex:1;min-width:0}
+}
+
+/* controls always sit along the bottom of the screen, in every orientation.
+   Box positions are handled in JS; content inside the boxes stays upright on screen in landscape. */
+@media (orientation:landscape) and (max-height:500px){
+  #board{gap:6px;padding-top:max(6px,env(safe-area-inset-top));padding-bottom:6px;padding-left:max(6px,env(safe-area-inset-left))}
+  .p{border-radius:16px}
+}
+</style>
+</head>
+<body>
+<div id="board"></div>
+
+<div id="bar">
+  <div id="timer"><button class="ib" id="tPlay" aria-label="Start or pause timer">▶</button><b id="tText">50:00</b><button class="ib" id="tReset" aria-label="Reset timer">↺</button></div>
+  <button class="ib" id="dice" aria-label="Pick who goes first">🎲</button>
+  <button class="ib hot" id="reset" aria-label="Reset scores">↺</button>
+  <button class="ib" id="gear" aria-label="Settings">⚙</button>
+</div>
+
+<dialog id="settings">
+  <h2>Game settings</h2>
+  <h3>Players</h3><div class="row" id="oPlayers"></div>
+  <h3>Points to win</h3><div class="row" id="oMax"></div>
+  <h3>Match format</h3><div class="row" id="oBo"></div>
+  <button class="opt" id="rWins" style="margin-top:10px;width:100%">Reset wins</button>
+  <h3>Landscape: charging port side</h3><div class="row" id="oSide"></div>
+  <h3>Timer</h3><div class="row" id="oTimer"></div>
+  <button class="done" id="sDone">Done</button>
+</dialog>
+
+<dialog id="picker">
+  <h2 id="pTitle" tabindex="-1" style="outline:0">Choose a legend</h2>
+  <div id="legendGrid"></div>
+  <button class="done" id="pClose" style="background:#262833">Cancel</button>
+</dialog>
+
+<input type="file" id="artFile" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden>
+<dialog id="cropper">
+  <h2>Crop your art</h2>
+  <div class="cwrap">
+    <canvas id="cvs"></canvas>
+    <div class="cside">
+      <input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+      <p class="hint">Drag to move. Pinch, scroll or use the slider to zoom.</p>
+      <div class="row" style="margin-top:16px"><button class="opt" id="cCancel">Cancel</button><button class="opt on" id="cSave">Save</button></div>
+    </div>
+  </div>
+</dialog>
+
+<script src="legends.js"></script>
+<script>
+// alphabetical, ignoring case and punctuation (Kai'Sa sorts as "kaisa"), so new names added to legends.js land in the right place
+const sortKey = n => n.toLowerCase().replace(/[^a-z0-9]/g, '');
+const LEGENDS = (window.LEGENDS || []).slice().sort((a, b) => sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0);
+const COLORS = [['#7a45d6','#241050'],['#14a79d','#063a3a'],['#dc9d2c','#4a3006'],['#d6457a','#4d1028']];
+const EXTS = ['png','jpg','jpeg','webp'];
+/* Art versions. File name = slug + key (e.g. ahri, ahria, ahris). Edit VARIANTS in legends.js to add more.
+   Only versions that actually have an image file show up in the picker. */
+const VARIANTS = (window.VARIANTS && window.VARIANTS.length) ? window.VARIANTS : [
+  {key:'',  label:'Original'},
+  {key:'a', label:'Alt art'},
+  {key:'s', label:'Alt art signed'}
+];
+const slug = n => n.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const $ = id => document.getElementById(id);
+
+let S = {side:'auto', players:2, max:8, mins:50, scores:[0,0,0,0], legend:[null,null,null,null], variant:['','','',''], wins:[0,0,0,0], gwin:null, bo:3};
+try{ Object.assign(S, JSON.parse(localStorage.getItem('rbc')||'{}')); }catch(e){}
+const save = () => { try{ localStorage.setItem('rbc', JSON.stringify(S)); }catch(e){} };
+
+/* ---- image with extension fallback + crop to the art area of the card ----
+   Card art sits in the top ~64% of the card (text box + legend tag are below it),
+   inside a gold frame. These fractions trim the frame and everything below the art. */
+const CROP = {x:.065, y:.06, w:.87, h:.58};
+const ART = {};
+function cropArt(url, cb){
+  const im = new Image();
+  im.onload = () => {
+    try{
+      const W = im.naturalWidth, H = im.naturalHeight;
+      const sx = W*CROP.x, sy = H*CROP.y, sw = W*CROP.w, sh = H*CROP.h, k = Math.min(1, 900/sw);
+      const c = document.createElement('canvas'); c.width = Math.round(sw*k); c.height = Math.round(sh*k);
+      c.getContext('2d').drawImage(im, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      cb(c.toDataURL('image/jpeg', .88));
+    }catch(e){ cb(url); }
+  };
+  im.onerror = () => cb(null);
+  im.src = url;
+}
+// file base name: normally the slugged legend name, unless legends.js maps it to something else (LEGEND_FILES)
+const baseOf = n => (window.LEGEND_FILES || {})[n] || slug(n);
+const USER = {};   // art you added in the app: id (file-style name, e.g. ahriu1) -> {id, name, n, key, url}
+function loadPortrait(name, key, onOk, onFail){
+  const id = baseOf(name) + (key||'');
+  if(USER[id]) return onOk(USER[id].url);
+  if(id in ART) return ART[id] ? onOk(ART[id]) : onFail();
+  let i = 0;
+  (function next(){
+    if(i >= EXTS.length){ ART[id] = null; return onFail(); }
+    cropArt('legends/' + id + '.' + EXTS[i++], r => { if(r){ ART[id] = r; onOk(r); } else next(); });
+  })();
+}
+const findArt = (name, key) => new Promise(res => loadPortrait(name, key, res, () => res(null)));
+
+/* ---- board ---- */
+/* Boxes are fixed to the DEVICE. q = quarter-turns clockwise that the device's bottom edge
+   (charging port side) has moved on screen: 0 = bottom, 1 = left, 2 = top, 3 = right. */
+function quarter(){
+  const land = innerWidth > innerHeight;
+  let a = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (+window.orientation || 0);
+  let q = (((360 - a) % 360) / 90) % 4;
+  if((q % 2 === 1) !== land) q = (q + 1) % 4;          // natural-landscape tablets
+  if(land && S.side !== 'auto') q = S.side === 'left' ? 1 : 3;
+  if(!land && q % 2 === 1) q = 0;
+  return q;
+}
+// device-frame cells: [col0,col1,row0,row1] on a C x 2 grid; top players face the top edge
+const CELLS = {2:[[0,1,0,1],[0,1,1,2]], 3:[[0,1,0,1],[1,2,0,1],[0,2,1,2]], 4:[[0,1,0,1],[1,2,0,1],[0,1,1,2],[1,2,1,2]]};
+function render(){
+  const b = $('board'); b.dataset.n = S.players; b.innerHTML = '';
+  const q = quarter(); let C = S.players===2 ? 1 : 2, R = 2;
+  let cells = CELLS[S.players].map(c => c.slice());
+  for(let t=0;t<q;t++){                                  // rotate the grid 90deg clockwise
+    cells = cells.map(([c0,c1,r0,r1]) => [R-r1, R-r0, c0, c1]); [C,R] = [R,C];
+  }
+  b.style.gridTemplateColumns = `repeat(${C},1fr)`; b.style.gridTemplateRows = `repeat(${R},1fr)`;
+  for(let i=0;i<S.players;i++){
+    const p = document.createElement('div');
+    // portrait: top players face the top edge (180). landscape: text/score/art stay upright on screen (0).
+    const base = i < (S.players===2?1:2) ? 180 : 0, deg = (q % 2) ? 0 : (base + q*90) % 360;
+    p.className = 'p';
+    p.style.setProperty('--r', deg + 'deg');
+    p.style.gridColumn = (cells[i][0]+1) + ' / ' + (cells[i][1]+1);
+    p.style.gridRow = (cells[i][2]+1) + ' / ' + (cells[i][3]+1);
+    p.id = 'p'+i; p.style.setProperty('--c1',COLORS[i][0]); p.style.setProperty('--c2',COLORS[i][1]);
+    p.innerHTML = `<div class="inner">
+        <div class="bg"></div><div class="shade"></div>
+        <div class="zone up" data-i="${i}" data-d="1">+</div>
+        <div class="zone down" data-i="${i}" data-d="-1">−</div>
+        <div class="score" id="s${i}">0</div>
+        <div class="name" data-i="${i}"><i>?</i><span>Pick legend</span></div>
+        <div class="wins" data-i="${i}"></div>
+        <div class="badge f">Goes first</div><div class="badge w">Winner</div>
+      </div>`;
+    b.appendChild(p); paint(i);
+  }
+}
+function paint(i){
+  const p = $('p'+i); if(!p) return;
+  $('s'+i).textContent = S.scores[i];
+  const need = Math.ceil(S.bo/2);
+  p.querySelector('.wins').innerHTML = Array.from({length:need},(_,k)=>`<b class="pip${k<S.wins[i]?' on':''}" data-k="${k}"></b>`).join('');
+  p.querySelector('.badge.w').textContent = S.wins[i] >= need ? 'Set winner 🏆' : 'Game win';
+  p.classList.toggle('won', S.scores[i] >= S.max || S.wins[i] >= need);
+  const n = S.legend[i], chip = p.querySelector('.name'), bg = p.querySelector('.bg');
+  if(!n){ chip.innerHTML = '<i>?</i><span>Pick legend</span>'; bg.style.backgroundImage=''; return; }
+  chip.innerHTML = `<i>${n[0]}</i><span>${n}</span>`; bg.style.backgroundImage='';
+  const show = url => { bg.style.backgroundImage = `url("${url}")`; chip.innerHTML = `<img src="${url}" alt=""><span>${n}</span>`; };
+  const key = S.variant[i] || '';
+  loadPortrait(n, key, show, () => { if(key) loadPortrait(n, '', show, () => {}); });   // missing version -> fall back to original
+}
+$('board').addEventListener('click', e => {
+  const pp = e.target.closest('.pip');
+  if(pp){ const i=+pp.parentNode.dataset.i, k=+pp.dataset.k; S.wins[i] = S.wins[i]===k+1 ? k : k+1; paint(i); save(); return; }
+  const z = e.target.closest('.zone'), nm = e.target.closest('.name');
+  if(z){ const i=+z.dataset.i; S.scores[i] = Math.max(0, S.scores[i] + +z.dataset.d); clearFirst(); sync(); if(navigator.vibrate) navigator.vibrate(8); }
+  else if(nm){ openPicker(+nm.dataset.i); }
+});
+
+/* ---- legend picker (step 1: legend, step 2: art version) ---- */
+let pickFor = 0, pickStep = 1; const pickScroll = [0,0,0,0];   // remembered list position, one per player box
+function choose(name, key){ S.legend[pickFor] = name; S.variant[pickFor] = key || ''; paint(pickFor); save(); $('picker').close(); }
+function openPicker(i, keep){
+  pickFor = i; pickStep = 1; if(!keep) pickScroll[i] = 0; $('pTitle').textContent = 'Choose a legend'; $('pClose').textContent = 'Cancel';
+  const g = $('legendGrid'); g.innerHTML = '';
+  const add = (name, label) => {
+    const d = document.createElement('div'); d.className = 'lg';
+    d.innerHTML = `<div class="im">${label||name[0]}</div><div class="t">${label ? 'No legend' : name}</div>`;
+    d.onclick = () => label ? choose(null,'') : openVariants(name);
+    g.appendChild(d);
+    if(!label) loadPortrait(name, '', url => { const im=d.querySelector('.im'); im.style.backgroundImage=`url("${url}")`; im.textContent=''; }, ()=>{});
+  };
+  add('', '—'); LEGENDS.forEach(n => add(n));
+  const dlg = $('picker');
+  if(!dlg.open) dlg.showModal();
+  $('pTitle').focus({preventScroll:true});            // stop the browser focusing the bottom Cancel button and scrolling to it
+  dlg.scrollTop = keep ? pickScroll[i] : 0;           // fresh open starts at the top, Back restores where you were
+}
+async function openVariants(name, restore){
+  if(!restore) pickScroll[pickFor] = $('picker').scrollTop;   // remember the list position for this player before leaving it
+  const files = (await Promise.all(VARIANTS.map(async v => ({v, url: await findArt(name, v.key)})))).filter(x => x.url);
+  const mine = userVariants(name).map(r => ({v:{key:r.key, label:'Custom'}, url:r.url, rec:r}));
+  const found = files.concat(mine);
+  pickStep = 2; $('pTitle').textContent = name; $('pClose').textContent = '← Back';
+  const g = $('legendGrid'); g.innerHTML = '';
+  const add = document.createElement('button'); add.className = 'addArt'; add.textContent = '＋ Add custom art';
+  add.onclick = () => { cName = name; $('artFile').click(); };
+  g.appendChild(add);
+  if(!found.length) found.push({v:{key:'', label:'Default'}, url:null});
+  found.forEach(({v, url, rec}) => {
+    const d = document.createElement('div'); d.className = 'lg';
+    d.innerHTML = `<div class="im"${url ? ` style="background-image:url('${url}')"` : ''}>${url ? '' : name[0]}</div><div class="t">${v.label}</div>`;
+    d.onclick = () => choose(name, v.key);
+    if(rec){
+      const x = document.createElement('button'); x.className = 'del'; x.textContent = '×'; x.title = 'Delete this art';
+      x.onclick = async e => { e.stopPropagation(); if(confirm('Delete this custom art?')){ await deleteUserArt(rec); openVariants(name, true); } };
+      d.appendChild(x);
+    }
+    g.appendChild(d);
+  });
+  $('picker').scrollTop = 0;
+}
+$('pClose').onclick = () => pickStep === 2 ? openPicker(pickFor, true) : $('picker').close();
+
+/* ---- your own art: saved on this device (IndexedDB), named like the files: legend base + 'u' + number (ahriu1, ahriu2 ...) ---- */
+const udb = () => new Promise((res, rej) => { const r = indexedDB.open('rbc-art', 1); r.onupgradeneeded = () => r.result.createObjectStore('art', {keyPath:'id'}); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const uTx = async (mode, fn) => { const db = await udb(); return new Promise((res, rej) => { const t = db.transaction('art', mode), q = fn(t.objectStore('art')); t.oncomplete = () => res(q && q.result); t.onerror = t.onabort = () => rej(t.error); }); };
+const userVariants = name => Object.values(USER).filter(r => r.name === name).sort((a, b) => a.n - b.n);
+async function saveUserArt(name, url){
+  const n = userVariants(name).reduce((m, r) => Math.max(m, r.n), 0) + 1;
+  const rec = {id: baseOf(name) + 'u' + n, name, n, key: 'u' + n, url};
+  USER[rec.id] = rec; await uTx('readwrite', st => st.put(rec)); return rec;
+}
+async function deleteUserArt(rec){
+  delete USER[rec.id];
+  for(let i = 0; i < 4; i++) if(S.legend[i] === rec.name && S.variant[i] === rec.key) S.variant[i] = '';
+  for(let i = 0; i < S.players; i++) paint(i);
+  save(); try{ await uTx('readwrite', st => st.delete(rec.id)); }catch(e){}
+}
+const loadUserArt = () => uTx('readonly', st => st.getAll()).then(list => { (list||[]).forEach(r => USER[r.id] = r); for(let i = 0; i < S.players; i++) paint(i); }).catch(() => {});
+
+/* ---- cropper: fixed frame shaped like the built-in art crop; drag to move, pinch / scroll / slider to zoom ---- */
+const FR = {w:896, h:834};                          // ~ the CROP area of a full card (.87 x 1030 : .58 x 1438)
+const cv = $('cvs'), cx = cv.getContext('2d'); cv.width = 640; cv.height = Math.round(640 * FR.h / FR.w);
+let cImg = null, cW = 0, cH = 0, cS = 1, cMin = 1, cX = 0, cY = 0, cName = '';   // image, its size, scale, min scale, offset
+const cClamp = () => { cX = Math.min(0, Math.max(cv.width - cW*cS, cX)); cY = Math.min(0, Math.max(cv.height - cH*cS, cY)); };
+const cDraw = () => { cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(cImg, cX, cY, cW*cS, cH*cS); };
+function cZoom(z, px, py){                          // z = multiple of the minimum scale, zooming around point (px, py)
+  z = Math.min(4, Math.max(1, z)); const ix = (px - cX) / cS, iy = (py - cY) / cS;
+  cS = cMin * z; cX = px - ix*cS; cY = py - iy*cS; cClamp(); $('zoom').value = z; cDraw();
+}
+const ptrs = new Map();
+const cp = e => { const r = cv.getBoundingClientRect(), k = cv.width / r.width; return {x:(e.clientX - r.left)*k, y:(e.clientY - r.top)*k}; };
+cv.onpointerdown = e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, cp(e)); };
+cv.onpointermove = e => {
+  if(!ptrs.has(e.pointerId)) return;
+  const old = ptrs.get(e.pointerId), now = cp(e);
+  if(ptrs.size === 1){ cX += now.x - old.x; cY += now.y - old.y; cClamp(); cDraw(); }
+  else if(ptrs.size === 2){
+    const o = [...ptrs.entries()].find(([id]) => id !== e.pointerId)[1];
+    const d0 = Math.hypot(old.x - o.x, old.y - o.y), d1 = Math.hypot(now.x - o.x, now.y - o.y);
+    if(d0 > 0) cZoom(cS / cMin * d1 / d0, (now.x + o.x)/2, (now.y + o.y)/2);
+  }
+  ptrs.set(e.pointerId, now);
+};
+cv.onpointerup = cv.onpointercancel = e => ptrs.delete(e.pointerId);
+cv.onwheel = e => { e.preventDefault(); const p = cp(e); cZoom(cS / cMin * (e.deltaY < 0 ? 1.1 : 1/1.1), p.x, p.y); };
+$('zoom').oninput = e => cZoom(+e.target.value, cv.width/2, cv.height/2);
+$('artFile').onchange = e => {
+  const f = e.target.files[0]; e.target.value = ''; if(!f) return;
+  const u = URL.createObjectURL(f), im = new Image();
+  im.onload = () => {
+    URL.revokeObjectURL(u); cImg = im; cW = im.naturalWidth; cH = im.naturalHeight;
+    cMin = cS = Math.max(cv.width / cW, cv.height / cH); cX = (cv.width - cW*cS)/2; cY = (cv.height - cH*cS)/2;
+    $('zoom').value = 1; cDraw(); $('cropper').showModal();
+  };
+  im.onerror = () => { URL.revokeObjectURL(u); alert('That file could not be read as an image. Use a webp, png, jpg or jpeg.'); };
+  im.src = u;
+};
+$('cCancel').onclick = () => $('cropper').close();
+$('cSave').onclick = async () => {
+  const out = document.createElement('canvas'); out.width = 900; out.height = Math.round(900 * FR.h / FR.w);
+  const k = out.width / cv.width;
+  out.getContext('2d').drawImage(cImg, cX*k, cY*k, cW*cS*k, cH*cS*k);
+  let url = out.toDataURL('image/webp', .85); if(!url.startsWith('data:image/webp')) url = out.toDataURL('image/jpeg', .88);
+  try{ await saveUserArt(cName, url); }catch(e){ alert('Could not save to this device, so this art will be lost when the app closes.'); }
+  $('cropper').close(); openVariants(cName, true);
+};
+
+/* ---- first player picker ---- */
+let rolling = false;
+function clearFirst(){ document.querySelectorAll('.p').forEach(p => p.classList.remove('first','scan')); }
+function pickFirst(){
+  if(rolling) return; rolling = true; clearFirst();
+  const n = S.players, total = n*3 + Math.floor(Math.random()*n); let step = 0;
+  (function tick(){
+    clearFirst(); const cur = step % n; $('p'+cur).classList.add('scan');
+    if(step === total){ $('p'+cur).classList.replace('scan','first'); rolling = false; if(navigator.vibrate) navigator.vibrate([30,40,30]); return; }
+    const delay = 90 + Math.pow(step/total, 3) * 420; step++; setTimeout(tick, delay);
+  })();
+}
+$('dice').onclick = pickFirst;
+
+/* ---- game wins: reaching the point target awards 1 win; undoing the points takes it back ---- */
+function sync(){
+  for(let i=0;i<S.players;i++) if(S.gwin===null && S.scores[i] >= S.max){ S.gwin = i; S.wins[i]++; }
+  if(S.gwin!==null && S.scores[S.gwin] < S.max){ S.wins[S.gwin] = Math.max(0, S.wins[S.gwin]-1); S.gwin = null; }
+  for(let i=0;i<S.players;i++) paint(i);
+  save();
+}
+const setWon = () => S.wins.slice(0,S.players).some(w => w >= Math.ceil(S.bo/2));
+
+/* ---- reset ---- */
+$('reset').onclick = () => {
+  const done = setWon();
+  if(!confirm(done ? 'Set finished. Start a new set (scores and wins reset)?' : (S.gwin!==null ? 'Start next game (wins are kept)?' : 'Reset scores for this game? (wins are kept)'))) return;
+  S.scores = [0,0,0,0]; S.gwin = null; if(done) S.wins = [0,0,0,0];
+  clearFirst(); for(let i=0;i<S.players;i++) paint(i); save();
+};
+
+/* ---- timer ---- */
+let left = S.mins*60, running = false, endAt = 0, iv = null, wake = null;
+const fmt = s => String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+function showT(){ $('tText').textContent = fmt(left); $('timer').classList.toggle('low', left <= 300 && left > 0); }
+async function setWake(on){ try{ if(on && navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); else if(wake){ wake.release(); wake = null; } }catch(e){} }
+function tStart(){ if(left<=0) return; running = true; endAt = Date.now() + left*1000; $('tPlay').textContent = '⏸'; $('timer').classList.remove('end'); setWake(true);
+  iv = setInterval(() => { left = Math.max(0, Math.ceil((endAt - Date.now())/1000)); showT(); if(left===0){ tStop(); $('timer').classList.add('end'); if(navigator.vibrate) navigator.vibrate([300,150,300,150,300]); } }, 250); }
+function tStop(){ running = false; clearInterval(iv); $('tPlay').textContent = '▶'; setWake(false); }
+$('tPlay').onclick = () => running ? tStop() : tStart();
+$('tReset').onclick = () => { tStop(); left = S.mins*60; $('timer').classList.remove('end'); showT(); };
+
+/* ---- settings ---- */
+function opts(id, vals, key, label, after){
+  const r = $(id); r.innerHTML = '';
+  vals.forEach(v => { const b = document.createElement('button'); b.className = 'opt' + (S[key]===v ? ' on':''); b.textContent = label(v);
+    b.onclick = () => { S[key] = v; save(); opts(id, vals, key, label, after); after && after(); }; r.appendChild(b); });
+}
+function buildSettings(){
+  opts('oPlayers',[2,3,4],'players',v=>v,render);
+  opts('oSide',['auto','left','right'],'side',v=>({auto:'Auto',left:'Left',right:'Right'}[v]),render);
+  opts('oMax',[8,9,10,11,12],'max',v=>v,sync);
+  opts('oBo',[1,3,5],'bo',v=>'Best of '+v,()=>{ for(let i=0;i<S.players;i++) paint(i); });
+  opts('oTimer',[30,50,60],'mins',v=>v+' min',()=>{ if(!running){ left = S.mins*60; showT(); } });
+}
+$('gear').onclick = () => { buildSettings(); $('settings').showModal(); };
+$('rWins').onclick = () => { if(!confirm('Reset all wins?')) return; S.wins=[0,0,0,0]; S.gwin=null; S.scores=[0,0,0,0]; for(let i=0;i<S.players;i++) paint(i); save(); };
+$('sDone').onclick = () => $('settings').close();
+
+let rt; const relayout = () => { clearTimeout(rt); rt = setTimeout(render, 120); };
+addEventListener('resize', relayout);
+if(screen.orientation) screen.orientation.addEventListener('change', relayout);
+render(); showT(); loadUserArt();
+if('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Capacitor) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
